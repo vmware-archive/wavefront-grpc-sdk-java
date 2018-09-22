@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.wavefront.sdk.grpc";
+option java_outer_classname = "SampleService";
+option objc_class_prefix = "SMPL";
+
+package wf.test;
+
+// a sample service to test grpc metrics
+service Sample {
+    // a unary method for testing basic telemetry
+    rpc echo (Request) returns (Response) {}
+
+    // a bidi streaming method for testing streaming telemetry
+    rpc replayMessages (stream Request) returns (stream Response) {}
+}
+
+message Request {
+    string message = 1;
+}
+
+message Response {
+    string message = 1;
+}
