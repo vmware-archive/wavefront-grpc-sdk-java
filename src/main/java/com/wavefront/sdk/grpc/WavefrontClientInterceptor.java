@@ -44,7 +44,7 @@ import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
 public class WavefrontClientInterceptor implements ClientInterceptor {
   private static final String REQUEST_PREFIX = "client.request.";
   private static final String RESPONSE_PREFIX = "client.response.";
-  private final Map<MetricName, AtomicInteger> GAUGES = new ConcurrentHashMap<>();
+  private final Map<MetricName, AtomicInteger> gauges = new ConcurrentHashMap<>();
   private final WavefrontGrpcReporter wfGrpcReporter;
   private final ApplicationTags applicationTags;
   private final boolean recordStreamingStats;
@@ -322,7 +322,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   }
 
   private AtomicInteger getGaugeValue(MetricName metricName) {
-    return GAUGES.computeIfAbsent(metricName, key -> {
+    return gauges.computeIfAbsent(metricName, key -> {
       final AtomicInteger toReturn = new AtomicInteger();
       wfGrpcReporter.registerGauge(key, () -> (double) toReturn.get());
       return toReturn;

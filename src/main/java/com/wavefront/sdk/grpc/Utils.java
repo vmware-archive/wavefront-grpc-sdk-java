@@ -29,13 +29,9 @@ public final class Utils {
    * @return true if its streaming gRPC.
    */
   public static boolean isStreamingMethod(MethodDescriptor.MethodType methodType) {
-    if (methodType == MethodDescriptor.MethodType.SERVER_STREAMING ||
+    return methodType == MethodDescriptor.MethodType.SERVER_STREAMING ||
         methodType == MethodDescriptor.MethodType.CLIENT_STREAMING ||
-        methodType == MethodDescriptor.MethodType.BIDI_STREAMING) {
-      return true;
-    } else {
-      return false;
-    }
+        methodType == MethodDescriptor.MethodType.BIDI_STREAMING;
   }
 
   /**
