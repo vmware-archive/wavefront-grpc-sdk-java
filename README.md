@@ -88,7 +88,7 @@ choose to enable or disable streaming specific stats.
     /* Create a Wavefront Client Interceptor using the application tags and wavefront gRPC 
      * reporter */
     WavefrontClientInterceptor wfClientInterceptor = new WavefrontServerTracerFactory(
-        wfGrpcTestReporter, applicationTags, true);
+        wfGrpcReporter, applicationTags, true);
     
 ```
 
@@ -100,7 +100,7 @@ enable or disable streaming specific stats.
     /* Create a Wavefront Server Tracer Factory using the application tags and wavefront gRPC 
      * reporter */
     WavefrontServerTracerFactory wfServerTracerFactory = new WavefrontServerTracerFactory(
-        wfGrpcTestReporter, applicationTags, true);
+        wfGrpcReporter, applicationTags, true);
     
 ```
 

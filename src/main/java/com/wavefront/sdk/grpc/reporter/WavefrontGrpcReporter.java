@@ -21,6 +21,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
 
+import static com.wavefront.sdk.common.Constants.APPLICATION_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CLIENT_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVER_COMPONENT;
 
@@ -171,7 +172,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
       }
       // application tag is reported with every metric
       Map<String, String> pointTags = new HashMap<>();
-      pointTags.put("application", applicationTags.getApplication());
+      pointTags.put(APPLICATION_TAG_KEY, applicationTags.getApplication());
       if (applicationTags.getCustomTags() != null) {
         pointTags.putAll(applicationTags.getCustomTags());
       }
