@@ -54,8 +54,7 @@
         <dependency>
             <groupId>com.wavefront</groupId>
             <artifactId>wavefront-sdk-java</artifactId>
-            <!-- TODO change from SNAPSHOT to v0.9.0 -->
-            <version>0.9.0-SNAPSHOT</version>
+            <version>0.9.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.findbugs</groupId>
