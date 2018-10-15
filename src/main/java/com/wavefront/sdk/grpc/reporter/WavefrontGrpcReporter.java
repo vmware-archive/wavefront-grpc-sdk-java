@@ -98,14 +98,14 @@ public class WavefrontGrpcReporter implements SdkReporter {
   }
 
   public synchronized void registerServerHeartBeat() {
-    if (serverHeartbeat != null) {
+    if (serverHeartbeat == null) {
       serverHeartbeat = new HeartbeaterService(wavefrontMetricSender, applicationTags,
           GRPC_SERVER_COMPONENT);
     }
   }
 
   public synchronized void registerClientHeartbeat() {
-    if (clientHeartbeat != null) {
+    if (clientHeartbeat == null) {
       clientHeartbeat = new HeartbeaterService(wavefrontMetricSender, applicationTags,
           GRPC_CLIENT_COMPONENT);
     }
