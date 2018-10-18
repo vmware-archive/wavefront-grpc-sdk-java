@@ -1,5 +1,6 @@
 package com.wavefront.sdk.grpc;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
@@ -7,6 +8,7 @@ import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.grpc.reporter.WavefrontGrpcReporter;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -25,6 +27,11 @@ import io.grpc.ForwardingClientCallListener;
 import io.grpc.Metadata;
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+import io.opentracing.Span;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMap;
+import io.opentracing.tag.Tags;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;
@@ -32,7 +39,10 @@ import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
+import static com.wavefront.sdk.grpc.Constants.GRPC_CONTEXT_SPAN_KEY;
+import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.GRPC_STATUS_KEY;
 
 /**
  * A client interceptor to generate gRPC client related stats and send them to wavefront. Create
@@ -46,13 +56,45 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   private static final String RESPONSE_PREFIX = "client.response.";
   private final Map<MetricName, AtomicInteger> gauges = new ConcurrentHashMap<>();
   private final WavefrontGrpcReporter wfGrpcReporter;
+  @Nullable
+  private final Tracer tracer;
   private final ApplicationTags applicationTags;
   private final boolean recordStreamingStats;
 
-  public WavefrontClientInterceptor(WavefrontGrpcReporter wfGrpcReporter,
+  public static class Builder {
+    private WavefrontGrpcReporter wfGrpcReporter;
+    @Nullable
+    private Tracer tracer;
+    private ApplicationTags applicationTags;
+    boolean recordStreamingStats = false;
+
+    public Builder(WavefrontGrpcReporter wfGrpcReporter, ApplicationTags applicationTags) {
+      this.wfGrpcReporter = Preconditions.checkNotNull(wfGrpcReporter, "invalid reporter");
+      this.applicationTags = Preconditions.checkNotNull(applicationTags, "invalid app tags");
+    }
+
+    public Builder recordStreamingStats() {
+      recordStreamingStats = true;
+      return this;
+    }
+
+    public Builder tracer(Tracer tracer) {
+      this.tracer = tracer;
+      return this;
+    }
+
+    public WavefrontClientInterceptor build() {
+      return new WavefrontClientInterceptor(wfGrpcReporter, tracer, applicationTags,
+          recordStreamingStats);
+    }
+  }
+
+  private WavefrontClientInterceptor(WavefrontGrpcReporter wfGrpcReporter,
+                                     @Nullable Tracer tracer,
                                     ApplicationTags applicationTags,
                                     boolean recordStreamingStats) {
     this.wfGrpcReporter = wfGrpcReporter;
+    this.tracer = tracer;
     this.applicationTags = applicationTags;
     this.recordStreamingStats = recordStreamingStats;
     wfGrpcReporter.registerClientHeartbeat();
@@ -61,10 +103,11 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   @Override
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
       MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
+    String methodName = Utils.getFriendlyMethodName(method.getFullMethodName());
+    Span span = createClientSpan(methodName, method.getType().toString());
     final ClientCallTracer tracerFactory = new ClientCallTracer(
-        Utils.getServiceName(method.getFullMethodName()),
-        Utils.getFriendlyMethodName(method.getFullMethodName()),
-        shouldRecordStreamingStats(method.getType()));
+        Utils.getServiceName(method.getFullMethodName()), methodName,
+        shouldRecordStreamingStats(method.getType()), span);
     ClientCall<ReqT, RespT> call =
         next.newCall(method, callOptions.withStreamTracerFactory(tracerFactory));
     return new ForwardingClientCall.SimpleForwardingClientCall<ReqT, RespT>(call) {
@@ -83,10 +126,29 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     };
   }
 
+  @Nullable
+  private Span createClientSpan(String spanName, String methodType) {
+    if (tracer == null) {
+      return null;
+    }
+    // attempt to get active spanContext, stored in grpc context
+    Span toReturn;
+    Span activeSpan = GRPC_CONTEXT_SPAN_KEY.get();
+    if (activeSpan != null) {
+      toReturn = tracer.buildSpan(spanName).asChildOf(activeSpan.context()).start();
+    } else {
+      toReturn = tracer.buildSpan(spanName).start();
+    }
+    Tags.SPAN_KIND.set(toReturn, Tags.SPAN_KIND_CLIENT);
+    toReturn.setTag(GRPC_METHOD_TYPE_KEY, methodType);
+    return toReturn;
+  }
+
   private class ClientCallTracer extends ClientStreamTracer.Factory {
-    final boolean streamingStats;
     final String grpcService;
     final String methodName;
+    final boolean streamingStats;
+    final Span span;
     final AtomicBoolean streamClosed = new AtomicBoolean(false);
     @Nullable
     final AtomicLong requestMessageCount;
@@ -99,10 +161,12 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     final Map<String, String> allTags;
     final Map<String, String> overallAggregatedPerSourceTags;
 
-    ClientCallTracer(String grpcService, String methodName, boolean streamingStats) {
+    ClientCallTracer(String grpcService, String methodName,
+                     boolean streamingStats, @Nullable Span span) {
       this.grpcService = grpcService;
       this.methodName = methodName;
       this.streamingStats = streamingStats;
+      this.span = span;
       this.startTime = System.currentTimeMillis();
       this.requestMessageCount = streamingStats ? new AtomicLong(0) : null;
       this.responseMessageCount = streamingStats ? new AtomicLong(0) : null;
@@ -131,6 +195,21 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
 
     @Override
     public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+      if (span != null) {
+        tracer.inject(span.context(), Format.Builtin.HTTP_HEADERS, new TextMap() {
+          @Override
+          public void put(String key, String value) {
+            Metadata.Key<String> headerKey = Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER);
+            headers.put(headerKey, value);
+          }
+
+          @Override
+          public Iterator<Map.Entry<String, String>> iterator() {
+            throw new UnsupportedOperationException(
+                "TextMap should only be used with Tracer.inject()");
+          }
+        });
+      }
       return new ClientTracer(this);
     }
 
@@ -139,6 +218,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         return;
       }
       long rpcLatency = System.currentTimeMillis() - startTime;
+      finishClientSpan(status);
       String methodWithStatus = methodName + "." + status.getCode().toString();
       // update requests inflight
       getGaugeValue(new MetricName(REQUEST_PREFIX + methodName + ".inflight", allTags)).
@@ -259,6 +339,16 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         wfGrpcReporter.incrementDeltaCounter(
             new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_application",
                 overallAggregatedPerApplicationTags));
+      }
+    }
+
+    private void finishClientSpan(Status status) {
+      if (span != null) {
+        span.setTag(GRPC_STATUS_KEY, status.getCode().toString());
+        if (status.getCode() != Status.Code.OK) {
+          Tags.ERROR.set(span, true);
+        }
+        span.finish();
       }
     }
   }

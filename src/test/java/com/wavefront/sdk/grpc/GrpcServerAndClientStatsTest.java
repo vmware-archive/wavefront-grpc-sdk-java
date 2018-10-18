@@ -63,10 +63,10 @@ public class GrpcServerAndClientStatsTest {
     // set up fake test reporter
     grpcTestReporter = new GrpcTestReporter();
     // set up sdk components with streaming stats
-    serverTracerFactory = new WavefrontServerTracerFactory(
-        grpcTestReporter, serverApplicationTags, true);
-    clientInterceptor = new WavefrontClientInterceptor(
-        grpcTestReporter, clientApplicationTags, true);
+    serverTracerFactory = new WavefrontServerTracerFactory.Builder(
+        grpcTestReporter, serverApplicationTags).recordStreamingStats().build();
+    clientInterceptor = new WavefrontClientInterceptor.Builder(
+        grpcTestReporter, clientApplicationTags).recordStreamingStats().build();
     setUpChannelAndServer(new SampleService());
   }
 
@@ -99,7 +99,7 @@ public class GrpcServerAndClientStatsTest {
   }
 
   @Test
-  public void testSuccessResponseStats() {
+  public void testSuccessResponseStats() throws Exception {
     // send message 1 message
     blockingStub.echo(Request.newBuilder().setMessage("message").build());
     // server and client heartbeats are registered

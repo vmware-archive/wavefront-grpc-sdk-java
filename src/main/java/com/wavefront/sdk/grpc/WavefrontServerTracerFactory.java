@@ -1,5 +1,6 @@
 package com.wavefront.sdk.grpc;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
@@ -18,6 +19,12 @@ import javax.annotation.Nullable;
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.propagation.TextMapExtractAdapter;
+import io.opentracing.tag.Tags;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;
@@ -25,7 +32,9 @@ import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
+import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.GRPC_STATUS_KEY;
 
 /**
  * A gRPC server tracer factory that listens to stream events on server to generate stats and
@@ -39,13 +48,44 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
   private static final String RESPONSE_PREFIX = "server.response.";
   private final Map<MetricName, AtomicInteger> gauges = new ConcurrentHashMap<>();
   private final WavefrontGrpcReporter wfGrpcReporter;
+  @Nullable
+  private final Tracer tracer;
   private final ApplicationTags applicationTags;
   private final boolean recordStreamingStats;
 
-  public WavefrontServerTracerFactory(WavefrontGrpcReporter wfGrpcReporter,
+  public static class Builder {
+    private WavefrontGrpcReporter wfGrpcReporter;
+    @Nullable
+    private Tracer tracer;
+    private ApplicationTags applicationTags;
+    boolean recordStreamingStats = false;
+
+    public Builder(WavefrontGrpcReporter wfGrpcReporter, ApplicationTags applicationTags) {
+      this.wfGrpcReporter = Preconditions.checkNotNull(wfGrpcReporter, "invalid reporter");
+      this.applicationTags = Preconditions.checkNotNull(applicationTags, "invalid app tags");
+    }
+
+    public Builder recordStreamingStats() {
+      this.recordStreamingStats = true;
+      return this;
+    }
+
+    public Builder tracer(Tracer tracer) {
+      this.tracer = tracer;
+      return this;
+    }
+
+    public WavefrontServerTracerFactory build() {
+      return new WavefrontServerTracerFactory(wfGrpcReporter, tracer, applicationTags,
+          recordStreamingStats);
+    }
+  }
+
+  private WavefrontServerTracerFactory(WavefrontGrpcReporter wfGrpcReporter, Tracer tracer,
                                       ApplicationTags applicationTags,
                                       boolean recordStreamingStats) {
     this.wfGrpcReporter = wfGrpcReporter;
+    this.tracer = tracer;
     this.applicationTags = applicationTags;
     this.recordStreamingStats = recordStreamingStats;
     wfGrpcReporter.registerServerHeartBeat();
@@ -53,14 +93,44 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
 
   @Override
   public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
-    return new ServerTracer(this, Utils.getFriendlyMethodName(fullMethodName),
-        Utils.getServiceName(fullMethodName));
+    String methodName = Utils.getFriendlyMethodName(fullMethodName);
+    return new ServerTracer(Utils.getServiceName(fullMethodName), methodName,
+        createServerSpan(headers, methodName));
+  }
+
+  private Span createServerSpan(Metadata headers, String methodName) {
+    if (tracer == null) {
+      return null;
+    }
+    Map<String, String> headerMap = new HashMap<String, String>();
+    for (String key : headers.keys()) {
+      if (!key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
+        String value = headers.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
+        headerMap.put(key, value);
+      }
+    }
+    Span span;
+    try {
+      SpanContext parentSpanCtx = tracer.extract(Format.Builtin.HTTP_HEADERS,
+          new TextMapExtractAdapter(headerMap));
+      if (parentSpanCtx == null) {
+        span = tracer.buildSpan(methodName).start();
+      } else {
+        span = tracer.buildSpan(methodName).asChildOf(parentSpanCtx).start();
+      }
+    } catch (IllegalArgumentException iae) {
+      span = tracer.buildSpan(methodName)
+          .withTag("Error", "Extract failed and an IllegalArgumentException was thrown")
+          .start();
+    }
+    return span;
   }
 
   private class ServerTracer extends ServerStreamTracer {
-    private final WavefrontServerTracerFactory tracerFactory;
-    private final String methodName;
     private final String grpcService;
+    private final String methodName;
+    @Nullable
+    private final Span span;
     private AtomicBoolean streamingMethod = new AtomicBoolean(false);
     private final AtomicBoolean streamClosed = new AtomicBoolean(false);
     @Nullable
@@ -71,15 +141,14 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     private final AtomicLong responseBytes = new AtomicLong(0);
     private final long startTime;
     private final Map<String, String> allTags;
-    final Map<String, String> overallAggregatedPerSourceTags;
+    private final Map<String, String> overallAggregatedPerSourceTags;
 
-    ServerTracer(WavefrontServerTracerFactory tracerFactory, String methodName,
-                 String grpcService) {
-      this.tracerFactory = tracerFactory;
+    ServerTracer(String grpcService, String methodName, Span span) {
       // TODO: consider using a stopwatch or nano time.
       this.startTime = System.currentTimeMillis();
-      this.methodName = methodName;
       this.grpcService = grpcService;
+      this.methodName = methodName;
+      this.span = span;
       this.requestMessageCount = new AtomicLong(0);
       this.responseMessageCount = new AtomicLong(0);
       this.allTags = new HashMap<String, String>() {{
@@ -107,6 +176,9 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     @Override
     public void serverCallStarted(ServerCallInfo<?, ?> callInfo) {
       streamingMethod.set(Utils.isStreamingMethod(callInfo.getMethodDescriptor().getType()));
+      if (span != null) {
+        span.setTag(GRPC_METHOD_TYPE_KEY, callInfo.getMethodDescriptor().getType().toString());
+      }
     }
 
     @Override
@@ -155,6 +227,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
         return;
       }
       long rpcLatency = System.currentTimeMillis() - startTime;
+      finishServerSpan(status);
       String methodWithStatus = methodName + "." + status.getCode().toString();
       // update requests inflight
       getGaugeValue(new MetricName(REQUEST_PREFIX + methodName + ".inflight", allTags)).
@@ -166,9 +239,9 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
           new MetricName(RESPONSE_PREFIX + methodWithStatus + ".latency", allTags), rpcLatency);
       // request, response size
       wfGrpcReporter.updateHistogram(
-          new MetricName(REQUEST_PREFIX +  methodName + ".bytes", allTags), requestBytes.get());
+          new MetricName(REQUEST_PREFIX + methodName + ".bytes", allTags), requestBytes.get());
       wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX +  methodName + ".bytes", allTags), responseBytes.get());
+          new MetricName(RESPONSE_PREFIX + methodName + ".bytes", allTags), responseBytes.get());
       // streaming stats
       if (shouldRecordStreamingStats()) {
         wfGrpcReporter.updateHistogram(
@@ -284,8 +357,18 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       }
     }
 
+    private void finishServerSpan(Status status) {
+      if (span != null) {
+        span.setTag(GRPC_STATUS_KEY, status.getCode().toString());
+        if (status.getCode() != Status.Code.OK) {
+          Tags.ERROR.set(span, true);
+        }
+        span.finish();
+      }
+    }
+
     private boolean shouldRecordStreamingStats() {
-      return tracerFactory.recordStreamingStats && streamingMethod.get();
+      return recordStreamingStats && streamingMethod.get();
     }
   }
 
