@@ -33,6 +33,7 @@ import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
+import static com.wavefront.sdk.grpc.Constants.GRPC_SERVER_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_STATUS_KEY;
 
@@ -123,6 +124,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
           .withTag("Error", "Extract failed and an IllegalArgumentException was thrown")
           .start();
     }
+    Tags.SPAN_KIND.set(span, Tags.SPAN_KIND_SERVER);
+    Tags.COMPONENT.set(span, GRPC_SERVER_COMPONENT);
     return span;
   }
 

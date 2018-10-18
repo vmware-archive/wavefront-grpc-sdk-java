@@ -39,6 +39,7 @@ import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
+import static com.wavefront.sdk.grpc.Constants.GRPC_CLIENT_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CONTEXT_SPAN_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
@@ -140,6 +141,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
       toReturn = tracer.buildSpan(spanName).start();
     }
     Tags.SPAN_KIND.set(toReturn, Tags.SPAN_KIND_CLIENT);
+    Tags.COMPONENT.set(toReturn, GRPC_CLIENT_COMPONENT);
     toReturn.setTag(GRPC_METHOD_TYPE_KEY, methodType);
     return toReturn;
   }
