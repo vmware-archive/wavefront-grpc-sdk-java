@@ -48,14 +48,14 @@
         </dependency>
         <dependency>
             <groupId>com.wavefront</groupId>
-            <artifactId>internal-reporter-java</artifactId>
-            <!-- TODO change from SNAPSHOT to v0.9.0 -->
-            <version>0.9.0-SNAPSHOT</version>
+            <artifactId>wavefront-sdk-java</artifactId>
+            <version>0.9.1-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.wavefront</groupId>
-            <artifactId>wavefront-sdk-java</artifactId>
-            <version>0.9.0</version>
+            <artifactId>internal-reporter-java</artifactId>
+            <!-- TODO change from SNAPSHOT to v0.9.0 -->
+            <version>0.9.0-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>io.opentracing</groupId>
