@@ -6,7 +6,7 @@
 
     <groupId>com.wavefront</groupId>
     <artifactId>wavefront-grpc-sdk-java</artifactId>
-    <version>0.9.0-SNAPSHOT</version>
+    <version>0.9.2-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Wavefront by VMware gRPC SDK for Java</name>
@@ -47,26 +47,16 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.wavefront</groupId>
-            <artifactId>wavefront-sdk-java</artifactId>
-            <version>0.9.1-SNAPSHOT</version>
-        </dependency>
-        <dependency>
-            <groupId>com.wavefront</groupId>
-            <artifactId>wavefront-internal-reporter-java</artifactId>
-            <!-- TODO change from SNAPSHOT to v0.9.0 -->
-            <version>0.9.0-SNAPSHOT</version>
-        </dependency>
-        <dependency>
             <groupId>io.opentracing</groupId>
             <artifactId>opentracing-api</artifactId>
             <version>0.31.0</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.google.code.findbugs</groupId>
-            <artifactId>jsr305</artifactId>
-            <version>3.0.0</version>
+            <groupId>com.wavefront</groupId>
+            <artifactId>wavefront-internal-reporter-java</artifactId>
+            <!-- TODO change from SNAPSHOT to v0.9.0 -->
+            <version>0.9.0-SNAPSHOT</version>
         </dependency>
 
         <!-- Test Dependencies -->
@@ -113,29 +103,6 @@
                     <source>${java.version}</source>
                     <target>${java.version}</target>
                 </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-shade-plugin</artifactId>
-                <version>3.0.0</version>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>shade</goal>
-                        </goals>
-                        <configuration>
-                            <filters>
-                                <filter>
-                                    <excludes>
-                                        <exclude>META-INF/license/**</exclude>
-                                        <exclude>license/**</exclude>
-                                    </excludes>
-                                </filter>
-                            </filters>
-                        </configuration>
-                    </execution>
-                </executions>
             </plugin>
             <!--Proto plugin for test purpose, with test only goals-->
             <plugin>
