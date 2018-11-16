@@ -41,9 +41,14 @@ import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CLIENT_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CONTEXT_SPAN_KEY;
+import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_STATUS_KEY;
+import static com.wavefront.sdk.grpc.Constants.REQUEST_BYTES_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.REQUEST_MESSAGES_COUNT_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.RESPONSE_BYTES_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.RESPONSE_MESSAGES_COUNT_TAG_KEY;
 
 /**
  * A client interceptor to generate gRPC client related stats and send them to wavefront. Create
@@ -79,7 +84,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
       return this;
     }
 
-    public Builder tracer(Tracer tracer) {
+    public Builder withTracer(Tracer tracer) {
       this.tracer = tracer;
       return this;
     }
@@ -90,10 +95,9 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     }
   }
 
-  private WavefrontClientInterceptor(WavefrontGrpcReporter wfGrpcReporter,
-                                     @Nullable Tracer tracer,
-                                    ApplicationTags applicationTags,
-                                    boolean recordStreamingStats) {
+  private WavefrontClientInterceptor(WavefrontGrpcReporter wfGrpcReporter, Tracer tracer,
+                                     ApplicationTags applicationTags,
+                                     boolean recordStreamingStats) {
     this.wfGrpcReporter = wfGrpcReporter;
     this.tracer = tracer;
     this.applicationTags = applicationTags;
@@ -162,6 +166,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     // granular per API tags, with grpc service tag
     final Map<String, String> allTags;
     final Map<String, String> overallAggregatedPerSourceTags;
+    final Map<String, String> histogramAllTags;
 
     ClientCallTracer(String grpcService, String methodName,
                      boolean streamingStats, @Nullable Span span) {
@@ -180,6 +185,15 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
           put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
               applicationTags.getShard()).
           put(GRPC_SERVICE_TAG_KEY, grpcService).
+          build();
+      this.histogramAllTags = ImmutableMap.<String, String>builder().
+          put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
+              applicationTags.getCluster()).
+          put(SERVICE_TAG_KEY, applicationTags.getService()).
+          put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
+              applicationTags.getShard()).
+          put(GRPC_SERVICE_TAG_KEY, grpcService).
+          put(GRPC_METHOD_TAG_KEY, methodName).
           build();
       this.overallAggregatedPerSourceTags = ImmutableMap.<String, String>builder().
           put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
@@ -228,20 +242,26 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
       getGaugeValue(new MetricName("client.total_requests.inflight",
           overallAggregatedPerSourceTags)).decrementAndGet();
       // rpc latency
-      wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".latency", allTags), rpcLatency);
+      wfGrpcReporter.updateHistogram(new MetricName(
+          RESPONSE_PREFIX + methodWithStatus + ".latency", histogramAllTags), rpcLatency);
+      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodWithStatus +
+          ".total_time", allTags), rpcLatency);
       // request, response size
-      wfGrpcReporter.updateHistogram(
-          new MetricName(REQUEST_PREFIX +  methodName + ".bytes", allTags), requestBytes.get());
-      wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX +  methodName + ".bytes", allTags), responseBytes.get());
+      wfGrpcReporter.updateHistogram(new MetricName(
+          REQUEST_PREFIX + methodName + ".bytes", histogramAllTags), requestBytes.get());
+      wfGrpcReporter.updateHistogram(new MetricName(
+          RESPONSE_PREFIX + methodName + ".bytes", histogramAllTags), responseBytes.get());
+      wfGrpcReporter.incrementCounter(new MetricName(REQUEST_PREFIX + methodName + ".total_bytes",
+          allTags), requestBytes.get());
+      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".total_bytes",
+          allTags), responseBytes.get());
       // streaming stats
       if (streamingStats) {
-        wfGrpcReporter.updateHistogram(
-            new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages_per_rpc", allTags),
+        wfGrpcReporter.updateHistogram(new MetricName(
+                REQUEST_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
             requestMessageCount.get());
-        wfGrpcReporter.updateHistogram(
-            new MetricName(RESPONSE_PREFIX + methodName + ".streaming.messages_per_rpc", allTags),
+        wfGrpcReporter.updateHistogram(new MetricName(
+                RESPONSE_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
             responseMessageCount.get());
       }
       Map<String, String> aggregatedPerShardTags = new HashMap<String, String>() {{
@@ -341,6 +361,8 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         wfGrpcReporter.incrementDeltaCounter(
             new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_application",
                 overallAggregatedPerApplicationTags));
+        wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".errors",
+            allTags));
       }
     }
 
@@ -349,6 +371,12 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         span.setTag(GRPC_STATUS_KEY, status.getCode().toString());
         if (status.getCode() != Status.Code.OK) {
           Tags.ERROR.set(span, true);
+        }
+        span.setTag(REQUEST_BYTES_TAG_KEY, requestBytes.get());
+        span.setTag(RESPONSE_BYTES_TAG_KEY, responseBytes.get());
+        if (streamingStats) {
+          span.setTag(REQUEST_MESSAGES_COUNT_TAG_KEY, requestMessageCount.get());
+          span.setTag(RESPONSE_MESSAGES_COUNT_TAG_KEY, responseMessageCount.get());
         }
         span.finish();
       }
@@ -383,7 +411,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         if (optionalWireSize >= 0) {
           wfGrpcReporter.updateHistogram(
               new MetricName(REQUEST_PREFIX + callTracer.methodName + ".streaming.message_bytes",
-                  callTracer.allTags), optionalWireSize);
+                  callTracer.histogramAllTags), optionalWireSize);
         }
       }
     }
@@ -399,7 +427,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
         if (optionalWireSize >= 0) {
           wfGrpcReporter.updateHistogram(
               new MetricName(RESPONSE_PREFIX + callTracer.methodName + ".streaming.message_bytes",
-                  callTracer.allTags), optionalWireSize);
+                  callTracer.histogramAllTags), optionalWireSize);
         }
       }
     }

@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.annotation.Nullable;
@@ -37,7 +38,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
       Logger.getLogger(WavefrontGrpcReporter.class.getCanonicalName());
   private final int reportingIntervalSeconds;
   private final WavefrontInternalReporter wfReporter;
-  private final WavefrontMetricSender wavefrontMetricSender;
+  private final WavefrontMetricSender wfMetricSender;
   private final ApplicationTags applicationTags;
   private final String source;
   private HeartbeaterService clientHeartbeat;
@@ -45,11 +46,11 @@ public class WavefrontGrpcReporter implements SdkReporter {
 
   @VisibleForTesting
   WavefrontGrpcReporter(WavefrontInternalReporter wfReporter, int reportingIntervalSeconds,
-                        WavefrontMetricSender wavefrontMetricSender,
+                        WavefrontMetricSender wfMetricSender,
                         ApplicationTags applicationTags, String source) {
     this.wfReporter = wfReporter;
     this.reportingIntervalSeconds = reportingIntervalSeconds;
-    this.wavefrontMetricSender = wavefrontMetricSender;
+    this.wfMetricSender = wfMetricSender;
     this.applicationTags = applicationTags;
     this.source = source;
   }
@@ -59,6 +60,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
     wfReporter.newCounter(metricName).inc();
   }
 
+  @Override
   public void incrementCounter(MetricName metricName, long incrementValue) {
     wfReporter.newCounter(metricName).inc(incrementValue);
   }
@@ -99,14 +101,14 @@ public class WavefrontGrpcReporter implements SdkReporter {
 
   public synchronized void registerServerHeartBeat() {
     if (serverHeartbeat == null) {
-      serverHeartbeat = new HeartbeaterService(wavefrontMetricSender, applicationTags,
+      serverHeartbeat = new HeartbeaterService(wfMetricSender, applicationTags,
           GRPC_SERVER_COMPONENT, source);
     }
   }
 
   public synchronized void registerClientHeartbeat() {
     if (clientHeartbeat == null) {
-      clientHeartbeat = new HeartbeaterService(wavefrontMetricSender, applicationTags,
+      clientHeartbeat = new HeartbeaterService(wfMetricSender, applicationTags,
           GRPC_CLIENT_COMPONENT, source);
     }
   }
@@ -167,6 +169,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
           source = InetAddress.getLocalHost().getHostName();
         } catch (UnknownHostException e) {
           // Should never happen
+          logger.log(Level.SEVERE, "source name not known, setting to unknown", e);
           source = "unknown";
         }
       }

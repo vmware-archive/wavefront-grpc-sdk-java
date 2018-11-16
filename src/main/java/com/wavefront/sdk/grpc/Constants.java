@@ -42,4 +42,29 @@ public final class Constants {
    * Tag key to define gRPC status.
    */
   public static final String GRPC_STATUS_KEY = "grpc.status";
+
+  /**
+   * Tag key to define gRPC method.
+   */
+  public static final String GRPC_METHOD_TAG_KEY = "grpc.method";
+
+  /**
+   * Tag key to define request bytes.
+   */
+  public static final String REQUEST_BYTES_TAG_KEY = "request.bytes";
+
+  /**
+   * Tag key to define response bytes.
+   */
+  public static final String RESPONSE_BYTES_TAG_KEY = "response.bytes";
+
+  /**
+   * Tag key to define request messages count.
+   */
+  public static final String REQUEST_MESSAGES_COUNT_TAG_KEY = "request.messages.count";
+
+  /**
+   * Tag key to define response messages count.
+   */
+  public static final String RESPONSE_MESSAGES_COUNT_TAG_KEY = "response.messages.count";
 }

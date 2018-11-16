@@ -32,13 +32,18 @@ import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
 import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
+import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVER_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVICE_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_STATUS_KEY;
+import static com.wavefront.sdk.grpc.Constants.REQUEST_BYTES_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.REQUEST_MESSAGES_COUNT_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.RESPONSE_BYTES_TAG_KEY;
+import static com.wavefront.sdk.grpc.Constants.RESPONSE_MESSAGES_COUNT_TAG_KEY;
 
 /**
- * A gRPC server tracer factory that listens to stream events on server to generate stats and
+ * A gRPC server withTracer factory that listens to stream events on server to generate stats and
  * sends them to Wavefront. Create only one instance of {@link WavefrontServerTracerFactory) per
  * one service and use it to trace all server.
  *
@@ -71,7 +76,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       return this;
     }
 
-    public Builder tracer(Tracer tracer) {
+    public Builder withTracer(Tracer tracer) {
       this.tracer = tracer;
       return this;
     }
@@ -83,8 +88,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
   }
 
   private WavefrontServerTracerFactory(WavefrontGrpcReporter wfGrpcReporter, Tracer tracer,
-                                      ApplicationTags applicationTags,
-                                      boolean recordStreamingStats) {
+                                       ApplicationTags applicationTags,
+                                       boolean recordStreamingStats) {
     this.wfGrpcReporter = wfGrpcReporter;
     this.tracer = tracer;
     this.applicationTags = applicationTags;
@@ -145,6 +150,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     private final long startTime;
     private final Map<String, String> allTags;
     private final Map<String, String> overallAggregatedPerSourceTags;
+    private final Map<String, String> histogramAllTags;
 
     ServerTracer(String grpcService, String methodName, Span span) {
       // TODO: consider using a stopwatch or nano time.
@@ -162,6 +168,15 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
             applicationTags.getShard());
         put(GRPC_SERVICE_TAG_KEY, grpcService);
       }};
+      this.histogramAllTags = ImmutableMap.<String, String>builder().
+          put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
+              applicationTags.getCluster()).
+          put(SERVICE_TAG_KEY, applicationTags.getService()).
+          put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
+              applicationTags.getShard()).
+          put(GRPC_SERVICE_TAG_KEY, grpcService).
+          put(GRPC_METHOD_TAG_KEY, methodName).
+          build();
       this.overallAggregatedPerSourceTags = ImmutableMap.<String, String>builder().
           put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
               applicationTags.getCluster()).
@@ -202,8 +217,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
         wfGrpcReporter.incrementCounter(
             new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages.count", allTags));
         if (optionalWireSize >= 0) {
-          wfGrpcReporter.updateHistogram(
-              new MetricName(REQUEST_PREFIX + methodName + ".streaming.message_bytes", allTags),
+          wfGrpcReporter.updateHistogram(new MetricName(
+              REQUEST_PREFIX + methodName + ".streaming.message_bytes", histogramAllTags),
               optionalWireSize);
         }
       }
@@ -217,8 +232,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
         wfGrpcReporter.incrementCounter(
             new MetricName(RESPONSE_PREFIX + methodName + ".streaming.messages.count", allTags));
         if (optionalWireSize >= 0) {
-          wfGrpcReporter.updateHistogram(
-              new MetricName(RESPONSE_PREFIX + methodName + ".streaming.message_bytes", allTags),
+          wfGrpcReporter.updateHistogram(new MetricName(
+              RESPONSE_PREFIX + methodName + ".streaming.message_bytes", histogramAllTags),
               optionalWireSize);
         }
       }
@@ -238,20 +253,27 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       getGaugeValue(new MetricName("server.total_requests.inflight",
           overallAggregatedPerSourceTags)).decrementAndGet();
       // rpc latency
-      wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".latency", allTags), rpcLatency);
+      wfGrpcReporter.updateHistogram(new MetricName(
+          RESPONSE_PREFIX + methodWithStatus + ".latency", histogramAllTags), rpcLatency);
+      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodWithStatus +
+          ".total_time", allTags), rpcLatency);
       // request, response size
+      wfGrpcReporter.updateHistogram(new MetricName(
+          REQUEST_PREFIX + methodName + ".bytes", histogramAllTags), requestBytes.get());
       wfGrpcReporter.updateHistogram(
-          new MetricName(REQUEST_PREFIX + methodName + ".bytes", allTags), requestBytes.get());
-      wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX + methodName + ".bytes", allTags), responseBytes.get());
+          new MetricName(RESPONSE_PREFIX + methodName + ".bytes", histogramAllTags),
+          responseBytes.get());
+      wfGrpcReporter.incrementCounter(new MetricName(REQUEST_PREFIX + methodName + ".total_bytes",
+          allTags), requestBytes.get());
+      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".total_bytes",
+          allTags), responseBytes.get());
       // streaming stats
       if (shouldRecordStreamingStats()) {
-        wfGrpcReporter.updateHistogram(
-            new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages_per_rpc", allTags),
+        wfGrpcReporter.updateHistogram(new MetricName(
+            REQUEST_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
             requestMessageCount.get());
-        wfGrpcReporter.updateHistogram(
-            new MetricName(RESPONSE_PREFIX + methodName + ".streaming.messages_per_rpc", allTags),
+        wfGrpcReporter.updateHistogram(new MetricName(
+            RESPONSE_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
             responseMessageCount.get());
         wfGrpcReporter.incrementCounter(
             new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages", allTags),
@@ -357,6 +379,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
         wfGrpcReporter.incrementDeltaCounter(
             new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_application",
                 overallAggregatedPerApplicationTags));
+        wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".errors",
+            allTags));
       }
     }
 
@@ -365,6 +389,12 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
         span.setTag(GRPC_STATUS_KEY, status.getCode().toString());
         if (status.getCode() != Status.Code.OK) {
           Tags.ERROR.set(span, true);
+        }
+        span.setTag(REQUEST_BYTES_TAG_KEY, requestBytes.get());
+        span.setTag(RESPONSE_BYTES_TAG_KEY, responseBytes.get());
+        if (shouldRecordStreamingStats()) {
+          span.setTag(REQUEST_MESSAGES_COUNT_TAG_KEY, requestMessageCount.get());
+          span.setTag(RESPONSE_MESSAGES_COUNT_TAG_KEY, responseMessageCount.get());
         }
         span.finish();
       }

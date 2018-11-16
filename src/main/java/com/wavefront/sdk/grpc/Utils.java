@@ -3,11 +3,11 @@ package com.wavefront.sdk.grpc;
 import io.grpc.MethodDescriptor;
 
 /**
- * Utilites for generating gRPC stats.
+ * Utilities for generating gRPC stats.
  *
  * @author Srujan Narkedamalli (snarkedamall@wavefront.com).
  */
-public final class Utils {
+final class Utils {
 
   private Utils() {
   }
@@ -18,7 +18,7 @@ public final class Utils {
    * @param fullMethodName of the gRPC method.
    * @return gRPC service name.
    */
-  public static String getServiceName(String fullMethodName) {
+  static String getServiceName(String fullMethodName) {
     return fullMethodName.substring(0, fullMethodName.lastIndexOf('/'));
   }
 
@@ -28,7 +28,7 @@ public final class Utils {
    * @param methodType type of the gRPC method for which to determine whether streaming or not.
    * @return true if its streaming gRPC.
    */
-  public static boolean isStreamingMethod(MethodDescriptor.MethodType methodType) {
+  static boolean isStreamingMethod(MethodDescriptor.MethodType methodType) {
     return methodType == MethodDescriptor.MethodType.SERVER_STREAMING ||
         methodType == MethodDescriptor.MethodType.CLIENT_STREAMING ||
         methodType == MethodDescriptor.MethodType.BIDI_STREAMING;
@@ -40,7 +40,7 @@ public final class Utils {
    * @param fullMethodName fully qualified gRPC method name.
    * @return a grpc full method name which is metric name friendly
    */
-  public static String getFriendlyMethodName(String fullMethodName) {
+  static String getFriendlyMethodName(String fullMethodName) {
     return fullMethodName.replace("/", ".");
   }
 }

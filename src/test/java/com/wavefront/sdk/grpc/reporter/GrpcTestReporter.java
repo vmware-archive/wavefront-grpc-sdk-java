@@ -84,7 +84,7 @@ public class GrpcTestReporter extends WavefrontGrpcReporter {
   }
 
   @Nullable
-  public Gauge<Double> getGuage(MetricName metricName) {
+  public Gauge<Double> getGauge(MetricName metricName) {
     return gauges.computeIfAbsent(metricName, metricName1 -> null);
   }
 
