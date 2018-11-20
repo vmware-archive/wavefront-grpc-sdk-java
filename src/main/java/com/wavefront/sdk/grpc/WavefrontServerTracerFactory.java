@@ -30,8 +30,6 @@ import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;
 import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SHARD_TAG_KEY;
-import static com.wavefront.sdk.common.Constants.SOURCE_KEY;
-import static com.wavefront.sdk.common.Constants.WAVEFRONT_PROVIDED_SOURCE;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_METHOD_TYPE_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVER_COMPONENT;
@@ -41,6 +39,12 @@ import static com.wavefront.sdk.grpc.Constants.REQUEST_BYTES_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.REQUEST_MESSAGES_COUNT_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.RESPONSE_BYTES_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.RESPONSE_MESSAGES_COUNT_TAG_KEY;
+import static com.wavefront.sdk.grpc.Utils.reportLatency;
+import static com.wavefront.sdk.grpc.Utils.reportRequestMessageCount;
+import static com.wavefront.sdk.grpc.Utils.reportResponseAndErrorStats;
+import static com.wavefront.sdk.grpc.Utils.reportResponseMessageCount;
+import static com.wavefront.sdk.grpc.Utils.reportRpcRequestBytes;
+import static com.wavefront.sdk.grpc.Utils.reportRpcResponseBytes;
 
 /**
  * A gRPC server withTracer factory that listens to stream events on server to generate stats and
@@ -52,6 +56,8 @@ import static com.wavefront.sdk.grpc.Constants.RESPONSE_MESSAGES_COUNT_TAG_KEY;
 public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
   private static final String REQUEST_PREFIX = "server.request.";
   private static final String RESPONSE_PREFIX = "server.response.";
+  private static final String SERVER_PREFIX = "server.";
+  private static final String SERVER_TOTAL_INFLIGHT = "server.total_requests.inflight";
   private final Map<MetricName, AtomicInteger> gauges = new ConcurrentHashMap<>();
   private final WavefrontGrpcReporter wfGrpcReporter;
   @Nullable
@@ -160,35 +166,21 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       this.span = span;
       this.requestMessageCount = new AtomicLong(0);
       this.responseMessageCount = new AtomicLong(0);
-      this.allTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SERVICE_TAG_KEY, applicationTags.getService());
-        put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
-            applicationTags.getShard());
-        put(GRPC_SERVICE_TAG_KEY, grpcService);
-      }};
-      this.histogramAllTags = ImmutableMap.<String, String>builder().
+      ImmutableMap.Builder<String, String> tagsBuilder = ImmutableMap.<String, String>builder().
           put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
               applicationTags.getCluster()).
           put(SERVICE_TAG_KEY, applicationTags.getService()).
           put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
-              applicationTags.getShard()).
-          put(GRPC_SERVICE_TAG_KEY, grpcService).
-          put(GRPC_METHOD_TAG_KEY, methodName).
-          build();
-      this.overallAggregatedPerSourceTags = ImmutableMap.<String, String>builder().
-          put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-              applicationTags.getCluster()).
-          put(SERVICE_TAG_KEY, applicationTags.getService()).
-          put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
-              applicationTags.getShard()).
-          build();
+              applicationTags.getShard());
+      // granular per RPC method metrics related tags.
+      this.overallAggregatedPerSourceTags = tagsBuilder.build();
+      this.allTags = tagsBuilder.put(GRPC_SERVICE_TAG_KEY, grpcService).build();
+      this.histogramAllTags = tagsBuilder.put(GRPC_METHOD_TAG_KEY, methodName).build();
       // update requests inflight
       getGaugeValue(new MetricName(REQUEST_PREFIX + methodName + ".inflight", allTags)).
           incrementAndGet();
-      getGaugeValue(new MetricName("server.total_requests.inflight",
-          overallAggregatedPerSourceTags)).incrementAndGet();
+      getGaugeValue(new MetricName(SERVER_TOTAL_INFLIGHT, overallAggregatedPerSourceTags)).
+          incrementAndGet();
     }
 
     @Override
@@ -214,8 +206,6 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
                                    long optionalUncompressedSize) {
       if (shouldRecordStreamingStats()) {
         requestMessageCount.incrementAndGet();
-        wfGrpcReporter.incrementCounter(
-            new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages.count", allTags));
         if (optionalWireSize >= 0) {
           wfGrpcReporter.updateHistogram(new MetricName(
               REQUEST_PREFIX + methodName + ".streaming.message_bytes", histogramAllTags),
@@ -229,8 +219,6 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
                                     long optionalUncompressedSize) {
       if (shouldRecordStreamingStats()) {
         responseMessageCount.incrementAndGet();
-        wfGrpcReporter.incrementCounter(
-            new MetricName(RESPONSE_PREFIX + methodName + ".streaming.messages.count", allTags));
         if (optionalWireSize >= 0) {
           wfGrpcReporter.updateHistogram(new MetricName(
               RESPONSE_PREFIX + methodName + ".streaming.message_bytes", histogramAllTags),
@@ -246,142 +234,28 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       }
       long rpcLatency = System.currentTimeMillis() - startTime;
       finishServerSpan(status);
-      String methodWithStatus = methodName + "." + status.getCode().toString();
       // update requests inflight
       getGaugeValue(new MetricName(REQUEST_PREFIX + methodName + ".inflight", allTags)).
           decrementAndGet();
-      getGaugeValue(new MetricName("server.total_requests.inflight",
-          overallAggregatedPerSourceTags)).decrementAndGet();
+      getGaugeValue(new MetricName(SERVER_TOTAL_INFLIGHT, overallAggregatedPerSourceTags)).
+          decrementAndGet();
       // rpc latency
-      wfGrpcReporter.updateHistogram(new MetricName(
-          RESPONSE_PREFIX + methodWithStatus + ".latency", histogramAllTags), rpcLatency);
-      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodWithStatus +
-          ".total_time", allTags), rpcLatency);
+      reportLatency(SERVER_PREFIX, methodName, status, rpcLatency, histogramAllTags, allTags,
+          wfGrpcReporter);
       // request, response size
-      wfGrpcReporter.updateHistogram(new MetricName(
-          REQUEST_PREFIX + methodName + ".bytes", histogramAllTags), requestBytes.get());
-      wfGrpcReporter.updateHistogram(
-          new MetricName(RESPONSE_PREFIX + methodName + ".bytes", histogramAllTags),
-          responseBytes.get());
-      wfGrpcReporter.incrementCounter(new MetricName(REQUEST_PREFIX + methodName + ".total_bytes",
-          allTags), requestBytes.get());
-      wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".total_bytes",
-          allTags), responseBytes.get());
+      reportRpcRequestBytes(SERVER_PREFIX, methodName, requestBytes.get(), histogramAllTags,
+          allTags, wfGrpcReporter);
+      reportRpcResponseBytes(SERVER_PREFIX, methodName, responseBytes.get(), histogramAllTags,
+          allTags, wfGrpcReporter);
       // streaming stats
       if (shouldRecordStreamingStats()) {
-        wfGrpcReporter.updateHistogram(new MetricName(
-            REQUEST_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
-            requestMessageCount.get());
-        wfGrpcReporter.updateHistogram(new MetricName(
-            RESPONSE_PREFIX + methodName + ".streaming.messages_per_rpc", histogramAllTags),
-            responseMessageCount.get());
-        wfGrpcReporter.incrementCounter(
-            new MetricName(REQUEST_PREFIX + methodName + ".streaming.messages", allTags),
-            requestMessageCount.get());
-        wfGrpcReporter.incrementCounter(
-            new MetricName(RESPONSE_PREFIX + methodName + ".streaming.messages", allTags),
-            responseMessageCount.get());
+        reportRequestMessageCount(SERVER_PREFIX, methodName, requestMessageCount.get(), allTags,
+            histogramAllTags, wfGrpcReporter);
+        reportResponseMessageCount(SERVER_PREFIX, methodName, responseMessageCount.get(), allTags,
+            histogramAllTags, wfGrpcReporter);
       }
-      Map<String, String> aggregatedPerShardTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SERVICE_TAG_KEY, applicationTags.getService());
-        put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
-            applicationTags.getShard());
-        put(GRPC_SERVICE_TAG_KEY, grpcService);
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> aggregatedPerServiceTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SERVICE_TAG_KEY, applicationTags.getService());
-        put(GRPC_SERVICE_TAG_KEY, grpcService);
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> aggregatedPerClutserTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(GRPC_SERVICE_TAG_KEY, grpcService);
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> aggergatedPerApplicationTags = new HashMap<String, String>() {{
-        put(GRPC_SERVICE_TAG_KEY, grpcService);
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      // overall RPC related metrics
-      Map<String, String> overallAggregatedPerShardTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SERVICE_TAG_KEY, applicationTags.getService());
-        put(SHARD_TAG_KEY, applicationTags.getShard() == null ? NULL_TAG_VAL :
-            applicationTags.getShard());
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> overallAggregatedPerServiceTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SERVICE_TAG_KEY, applicationTags.getService());
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> overallAggregatedPerClusterTags = new HashMap<String, String>() {{
-        put(CLUSTER_TAG_KEY, applicationTags.getCluster() == null ? NULL_TAG_VAL :
-            applicationTags.getCluster());
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      Map<String, String> overallAggregatedPerApplicationTags = new HashMap<String, String>() {{
-        put(SOURCE_KEY, WAVEFRONT_PROVIDED_SOURCE);
-      }};
-      // granular RPC stats
-      wfGrpcReporter.incrementCounter(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".cumulative", allTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".aggregated_per_shard",
-              aggregatedPerShardTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".aggregated_per_service",
-              aggregatedPerServiceTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".aggregated_per_cluster",
-              aggregatedPerClutserTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + methodWithStatus + ".aggregated_per_application",
-              aggergatedPerApplicationTags));
-      // overall RPC stats
-      wfGrpcReporter.incrementCounter(
-          new MetricName(RESPONSE_PREFIX + "completed.aggregated_per_source",
-              overallAggregatedPerSourceTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + "completed.aggregated_per_shard",
-              overallAggregatedPerShardTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + "completed.aggregated_per_service",
-              overallAggregatedPerServiceTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + "completed.aggregated_per_cluster",
-              overallAggregatedPerClusterTags));
-      wfGrpcReporter.incrementDeltaCounter(
-          new MetricName(RESPONSE_PREFIX + "completed.aggregated_per_application",
-              overallAggregatedPerApplicationTags));
-      // overall error stats
-      if (status.getCode() != Status.Code.OK) {
-        wfGrpcReporter.incrementCounter(
-            new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_source",
-                overallAggregatedPerSourceTags));
-        wfGrpcReporter.incrementDeltaCounter(
-            new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_shard",
-                overallAggregatedPerShardTags));
-        wfGrpcReporter.incrementDeltaCounter(
-            new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_service",
-                overallAggregatedPerServiceTags));
-        wfGrpcReporter.incrementDeltaCounter(
-            new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_cluster",
-                overallAggregatedPerClusterTags));
-        wfGrpcReporter.incrementDeltaCounter(
-            new MetricName(RESPONSE_PREFIX + "errors.aggregated_per_application",
-                overallAggregatedPerApplicationTags));
-        wfGrpcReporter.incrementCounter(new MetricName(RESPONSE_PREFIX + methodName + ".errors",
-            allTags));
-      }
+      reportResponseAndErrorStats(SERVER_PREFIX, methodName, grpcService, status, applicationTags,
+          allTags, overallAggregatedPerSourceTags, wfGrpcReporter);
     }
 
     private void finishServerSpan(Status status) {
