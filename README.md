@@ -1,4 +1,4 @@
-# Wavefront by VMware gRPC SDK for Java
+# wavefront-grpc-sdk-java
 
 Wavefront gRPC SDK for Java instruments gRPC APIs to send telemetry data to Wavefront from Java 
 applications. It consists of a simple and easily configurable API.
