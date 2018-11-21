@@ -1,6 +1,6 @@
-# wavefront-grpc-sdk-java
+# wavefront-grpc-sdk-java [![build status][ci-img]][ci] [![Released Version][maven-img]][maven]
 
-Wavefront gRPC SDK for Java instruments gRPC APIs to send telemetry data to Wavefront from Java 
+Wavefront gRPC SDK for Java instruments gRPC APIs to send telemetry data to Wavefront from Java
 applications. It consists of a simple and easily configurable API.
 
 ## Usage
@@ -9,9 +9,10 @@ If you are using Maven, add following maven dependency to your pom.xml
 <dependency>
     <groupId>com.wavefront</groupId>
     <artifactId>wavefront-grpc-sdk-java</artifactId>
-    <version>0.9.0</version>
+    <version>$releaseVersion</version>
 </dependency>
 ```
+Replace `$releaseVersion` with the latest version available on [maven](http://search.maven.org/#search%7Cga%7C1%7Cwavefront-grpc-sdk-java).
 
 ## gRPC ClientInterceptor and ServerTracer Factory
 SDK gather gRPC request/response related telemetry (including streaming specific stats) for both gRPC client and gRPC server. On client a gRPC `ClientInterceptor` is used to provide this info
@@ -25,7 +26,7 @@ Before you configure the SDK you need to decide the metadata that you wish to em
 ```
 grpc based application is composed of microservices. Each and every microservice in your application should have the service tag defined.
 ```java
-    /* Set the name of your service, 
+    /* Set the name of your service,
      * for instance - 'inventory' service for your OrderingApp */
     String service = "inventory";
 ```
@@ -36,7 +37,7 @@ You can also define optional tags (cluster and shard).
      * your app is running in 'us-west-2' cluster */
     String cluster = "us-west-2";
 
-    /* Optional shard field, set it to 'secondary', assuming your 
+    /* Optional shard field, set it to 'secondary', assuming your
      * application has 2 shards - primary and secondary */
     String shard = "secondary";
 ```
@@ -58,7 +59,7 @@ Now create ApplicationTags instance using the above metatdata.
 ```
 
 ### WavefrontSender
-We need to instantiate WavefrontSender 
+We need to instantiate WavefrontSender
 (i.e. either WavefrontProxyClient or WavefrontDirectIngestionClient)
 Refer to this page (https://github.com/wavefrontHQ/wavefront-java-sdk/blob/master/README.md)
 to instantiate WavefrontProxyClient or WavefrontDirectIngestionClient.
@@ -81,27 +82,27 @@ to instantiate WavefrontProxyClient or WavefrontDirectIngestionClient.
 ```
 
 ### WavefrontClientInterceptor
-If you are configuring telemetry for a gRPC client, then last step is to construct a 
-`WavefrontClientInterceptor` and use it to intercept the gRPC `channel`. You can 
+If you are configuring telemetry for a gRPC client, then last step is to construct a
+`WavefrontClientInterceptor` and use it to intercept the gRPC `channel`. You can
 choose to enable or disable streaming specific stats.
 ```java
-    /* Create a Wavefront Client Interceptor using the application tags and wavefront gRPC 
+    /* Create a Wavefront Client Interceptor using the application tags and wavefront gRPC
      * reporter */
     WavefrontClientInterceptor wfClientInterceptor = new WavefrontServerTracerFactory(
         wfGrpcReporter, applicationTags, true);
-    
+
 ```
 
 ### WavefrontServerTracerFactory
-If you are configuring telemetry for a gRPC server, then last step is to construct a 
-`WavefrontServerTracerFactory` and use it to listen to all requests on server. You can choose to 
+If you are configuring telemetry for a gRPC server, then last step is to construct a
+`WavefrontServerTracerFactory` and use it to listen to all requests on server. You can choose to
 enable or disable streaming specific stats.
 ```java
-    /* Create a Wavefront Server Tracer Factory using the application tags and wavefront gRPC 
+    /* Create a Wavefront Server Tracer Factory using the application tags and wavefront gRPC
      * reporter */
     WavefrontServerTracerFactory wfServerTracerFactory = new WavefrontServerTracerFactory(
         wfGrpcReporter, applicationTags, true);
-    
+
 ```
 
 ## Out of the box metrics and histograms for your gRPC based application.
@@ -109,11 +110,11 @@ Let's say you have order managing gRPC service with the below given proto schema
 
 ```proto
 syntax = "proto3";
- 
+
 option java_package = "com.wf.examples.inventory"
 
 package com.ordering
- 
+
 // The order service definition.
 service OrderManager {
    // get single order status
@@ -124,15 +125,15 @@ service OrderManager {
 }
 ```
 
-Let's assume this gRPC Service Server is 
-1) part of 'Ordering' application 
-2) running inside 'Inventory' microservice 
-3) deployed in 'us-west-1' cluster 
-4) serviced by 'primary' shard 
-5) on source = host-1 
+Let's assume this gRPC Service Server is
+1) part of 'Ordering' application
+2) running inside 'Inventory' microservice
+3) deployed in 'us-west-1' cluster
+4) serviced by 'primary' shard
+5) on source = host-1
 6) this API returns `OK` gRPC status code.
 
-if this gRPC service client and server are instrumented using Wavefront SDK as mentioned above, 
+if this gRPC service client and server are instrumented using Wavefront SDK as mentioned above,
 you will see following stats that are sent directly to Wavefront.
 
 Note: for gRPC stats, grpc.service is the service name defined in the proto schema and service refers to user provided value in ApplicationTags.
@@ -194,12 +195,12 @@ Note: for gRPC stats, grpc.service is the service name defined in the proto sche
 
 ## Client Metrics
 
-Let's assume this gRPC Service client accessing the OrderManager is 
-1) part of 'Ordering' application 
-2) running inside 'Billing' microservice 
-3) deployed in 'us-west-1' cluster 
-4) serviced by 'primary' shard 
-5) on source = host-1 
+Let's assume this gRPC Service client accessing the OrderManager is
+1) part of 'Ordering' application
+2) running inside 'Billing' microservice
+3) deployed in 'us-west-1' cluster
+4) serviced by 'primary' shard
+5) on source = host-1
 6) this API returned `OK` gRPC status code.
 
 ### Request Gauges
@@ -255,3 +256,8 @@ Let's assume this gRPC Service client accessing the OrderManager is
 |grpc.client.response.errors.aggregated_per_service.count|DeltaCounter|wavefront-provided|Ordering|us-west-1|Billing|n/a|n/a|
 |grpc.client.response.errors.aggregated_per_cluster.count|DeltaCounter|wavefront-provided|Ordering|us-west-1|n/a|n/a|n/a|
 |grpc.client.response.errors.aggregated_per_application.count|DeltaCounter|wavefront-provided|Ordering|n/a|n/a|n/a|n/a|
+
+[ci-img]: https://travis-ci.com/wavefrontHQ/wavefront-grpc-sdk-java.svg?branch=master
+[ci]: https://travis-ci.com/wavefrontHQ/wavefront-grpc-sdk-java
+[maven-img]: https://img.shields.io/maven-central/v/com.wavefront/wavefront-grpc-sdk-java.svg?maxAge=2592000
+[maven]: http://search.maven.org/#search%7Cga%7C1%7Cwavefront-grpc-sdk-java
