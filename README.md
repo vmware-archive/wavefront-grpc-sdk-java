@@ -46,7 +46,7 @@ A `WavefrontSender` object implements the low-level interface for sending data t
 * Otherwise, follow the steps in [Set Up a WavefrontSender](https://github.com/wavefrontHQ/wavefront-sdk-java/blob/master/docs/sender.md#set-up-a-wavefrontsender).
 
 
-### Step 3. Set Up a WavefrontGrpcReporter
+### 3. Set Up a WavefrontGrpcReporter
 
 A `WavefrontGrpcReporter` reports trace data to Wavefront. To build a `WavefrontGrpcReporter`, you specify:
 
@@ -74,7 +74,7 @@ wfGrpcReporterBuilder.reportingIntervalSeconds(30);
 WavefrontGrpcReporter wfGrpcReporter = wfGrpcReporterBuilder.build(wavefrontSender);
 ```
 
-### Step 4. Set Up Client or Server Instrumentation
+### 4. Set Up Client or Server Instrumentation
 
 Choose one or both of the following options based on your microservice's behavior.
 
