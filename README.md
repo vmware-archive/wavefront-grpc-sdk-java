@@ -1,9 +1,9 @@
 # wavefront-grpc-sdk-java [![build status][ci-img]][ci] [![Released Version][maven-img]][maven]
 
-The Wavefront gRPC SDK for Java is a library that collects out-of-the-box metrics, histograms, and trace data from gRPC operations in your Java application, and reports that data to Wavefront. You can analyze the telemetry data in [Wavefront](www.wavefront.com) to better understand how your application is performing in production. 
+The Wavefront gRPC SDK for Java is a library that collects out-of-the-box metrics, histograms, and trace data from gRPC operations in your Java application, and reports that data to Wavefront. You can analyze the telemetry data in [Wavefront](https://www.wavefront.com) to better understand how your application is performing in production. 
 
 
-## Usage
+## Maven
 If you are using Maven, add following maven dependency to your `pom.xml`.
 ```
 <dependency>
@@ -23,7 +23,7 @@ For each gRPC-based microservice, [add the dependency](#maven) if you have not a
 
 1. [Create an `ApplicationTags` instance](#1-set-up-application-tags), which specifies metadata about your application.
 2. [Create a `WavefrontSender`](#2-set-up-a-wavefrontsender) for sending data to Wavefront.
-3. [Create a `WavefrontGrpcReporter`](#3-create-a-wavefrontgrpcreporter) for reporting gRPC metrics and histograms to Wavefront.
+3. [Create a `WavefrontGrpcReporter`](#3-set-up-a-wavefrontgrpcreporter) for reporting gRPC metrics and histograms to Wavefront.
 4. Create a `WavefrontClientInterceptor` or a `WavefrontServerTracerFactory`, as appropriate:
     - [To instrument a gRPC client, create a `WavefrontClientInterceptor`](#option-1-instrument-a-grpc-client) to collect telemetry data from sent requests and received responses.
 
@@ -51,7 +51,7 @@ A `WavefrontSender` object implements the low-level interface for sending data t
 A `WavefrontGrpcReporter` reports trace data to Wavefront. To build a `WavefrontGrpcReporter`, you specify:
 
 * An `ApplicationTags` object ([see above](#1-set-up-application-tags))
-* A `WavefrontSender` object ([see above](2-set-up-a-wavefrontsender)).
+* A `WavefrontSender` object ([see above](#2-set-up-a-wavefrontsender)).
 
 You can optionally specify:
 * A nondefault source for the reported data. If you omit the source, the host name is automatically used.
