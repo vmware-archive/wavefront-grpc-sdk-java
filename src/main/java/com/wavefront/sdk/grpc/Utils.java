@@ -1,15 +1,13 @@
 package com.wavefront.sdk.grpc;
 
 import com.google.common.collect.ImmutableMap;
-
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
 import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.grpc.reporter.WavefrontGrpcReporter;
-
-import java.util.Map;
-
 import io.grpc.MethodDescriptor;
 import io.grpc.Status;
+
+import java.util.Map;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;

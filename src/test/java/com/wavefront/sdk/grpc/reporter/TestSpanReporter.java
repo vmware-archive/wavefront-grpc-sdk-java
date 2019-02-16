@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import io.opentracing.Span;
-
 public class TestSpanReporter implements Reporter {
   private final ConcurrentMap<String, WavefrontSpan> spanCache = new ConcurrentHashMap<>();
 

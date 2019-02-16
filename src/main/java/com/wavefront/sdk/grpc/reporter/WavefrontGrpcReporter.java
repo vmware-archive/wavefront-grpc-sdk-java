@@ -1,7 +1,6 @@
 package com.wavefront.sdk.grpc.reporter;
 
 import com.google.common.annotations.VisibleForTesting;
-
 import com.wavefront.internal.reporter.SdkReporter;
 import com.wavefront.internal.reporter.WavefrontInternalReporter;
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
@@ -10,8 +9,10 @@ import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.common.application.HeartbeaterService;
 import com.wavefront.sdk.entities.metrics.WavefrontMetricSender;
 
+import javax.annotation.Nullable;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -19,8 +20,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import javax.annotation.Nullable;
 
 import static com.wavefront.sdk.common.Constants.APPLICATION_TAG_KEY;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CLIENT_COMPONENT;
@@ -102,14 +101,14 @@ public class WavefrontGrpcReporter implements SdkReporter {
   public synchronized void registerServerHeartBeat() {
     if (serverHeartbeat == null) {
       serverHeartbeat = new HeartbeaterService(wfMetricSender, applicationTags,
-          GRPC_SERVER_COMPONENT, source);
+          Collections.singletonList(GRPC_SERVER_COMPONENT), source);
     }
   }
 
   public synchronized void registerClientHeartbeat() {
     if (clientHeartbeat == null) {
       clientHeartbeat = new HeartbeaterService(wfMetricSender, applicationTags,
-          GRPC_CLIENT_COMPONENT, source);
+          Collections.singletonList(GRPC_CLIENT_COMPONENT), source);
     }
   }
 
