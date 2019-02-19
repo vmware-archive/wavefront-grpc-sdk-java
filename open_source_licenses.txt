@@ -1,6 +1,6 @@
 open_source_licenses.txt
 
-Wavefront by VMware gRPC SDK for Java 0.9.1 GA
+Wavefront by VMware gRPC SDK for Java 0.9.2 GA
 
 ======================================================================
 
@@ -263,8 +263,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-
-
 >>> io.dropwizard.metrics5:metrics-core-5.0.0-rc2
 
 License: Apache 2.0
@@ -468,9 +466,7 @@ Released under the Creative Commons Attribution License
 Official home: http://www.jcip.net
 
 
-
 =============== APPENDIX. Standard License Files ============== 
-
 
 
 --------------- SECTION 1: Apache License, V2.0 -----------
@@ -733,4 +729,4 @@ Source Files is valid for three years from the date you acquired or last used th
 Software product. Alternatively, the Source Files may accompany the
 VMware service.
 
-[WAVEFRONTGRPCSDKJAVA091GANT020619]
+[WAVEFRONTGRPCSDKJAVA092GANT021819]
