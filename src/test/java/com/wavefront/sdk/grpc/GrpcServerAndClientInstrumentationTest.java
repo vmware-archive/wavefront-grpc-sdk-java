@@ -419,9 +419,10 @@ public class GrpcServerAndClientInstrumentationTest {
   }
 
   @Test
-  public void testPayloadSizeStats() {
+  public void testPayloadSizeStats() throws Exception {
     // send message 1 message
     blockingStub.echo(Request.newBuilder().setMessage("message").build());
+    Thread.sleep(1000);
     // server req and resp bytes
     assertEquals(9, (long) grpcTestReporter.getHistogram(new MetricName(
         "server.response.wf.test.Sample.echo.bytes", new HashMap<String, String>() {{
@@ -482,6 +483,7 @@ public class GrpcServerAndClientInstrumentationTest {
     }
     request.onCompleted();
     responseFuture.get(1, TimeUnit.MINUTES);
+    Thread.sleep(1000);
     // streaming server stats
     assertEquals(27, (long) grpcTestReporter.getHistogram(new MetricName(
         "server.request.wf.test.Sample.replayMessages.bytes", new HashMap<String, String>() {{
