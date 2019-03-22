@@ -2,9 +2,21 @@ package com.wavefront.sdk.grpc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
 import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.grpc.reporter.WavefrontGrpcReporter;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+
+import javax.annotation.Nullable;
+
 import io.grpc.Metadata;
 import io.grpc.ServerStreamTracer;
 import io.grpc.Status;
@@ -14,14 +26,6 @@ import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
 import io.opentracing.propagation.TextMapExtractAdapter;
 import io.opentracing.tag.Tags;
-
-import javax.annotation.Nullable;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;
@@ -59,6 +63,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
   private final WavefrontGrpcReporter wfGrpcReporter;
   @Nullable
   private final Tracer tracer;
+  @Nullable
+  private final Function<String, String> spanNameOverride;
   private final ApplicationTags applicationTags;
   private final boolean recordStreamingStats;
 
@@ -66,6 +72,8 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     private WavefrontGrpcReporter wfGrpcReporter;
     @Nullable
     private Tracer tracer;
+    @Nullable
+    private Function<String, String> spanNameOverride;
     private ApplicationTags applicationTags;
     boolean recordStreamingStats = false;
 
@@ -84,19 +92,26 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       return this;
     }
 
+    public Builder spanNameOverride(Function<String, String> fullMethodNameTransform) {
+      this.spanNameOverride = fullMethodNameTransform;
+      return this;
+    }
+
     public WavefrontServerTracerFactory build() {
       return new WavefrontServerTracerFactory(wfGrpcReporter, tracer, applicationTags,
-          recordStreamingStats);
+          recordStreamingStats, spanNameOverride);
     }
   }
 
   private WavefrontServerTracerFactory(WavefrontGrpcReporter wfGrpcReporter, Tracer tracer,
                                        ApplicationTags applicationTags,
-                                       boolean recordStreamingStats) {
+                                       boolean recordStreamingStats,
+                                       Function<String, String> spanNameOverride) {
     this.wfGrpcReporter = wfGrpcReporter;
     this.tracer = tracer;
     this.applicationTags = applicationTags;
     this.recordStreamingStats = recordStreamingStats;
+    this.spanNameOverride = spanNameOverride;
     wfGrpcReporter.registerServerHeartBeat();
   }
 
@@ -111,7 +126,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     if (tracer == null) {
       return null;
     }
-    Map<String, String> headerMap = new HashMap<String, String>();
+    Map<String, String> headerMap = new HashMap<>();
     for (String key : headers.keys()) {
       if (!key.endsWith(Metadata.BINARY_HEADER_SUFFIX)) {
         String value = headers.get(Metadata.Key.of(key, Metadata.ASCII_STRING_MARSHALLER));
@@ -119,16 +134,17 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       }
     }
     Span span;
+    String spanName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
     try {
       SpanContext parentSpanCtx = tracer.extract(Format.Builtin.HTTP_HEADERS,
           new TextMapExtractAdapter(headerMap));
       if (parentSpanCtx == null) {
-        span = tracer.buildSpan(methodName).start();
+        span = tracer.buildSpan(spanName).start();
       } else {
-        span = tracer.buildSpan(methodName).asChildOf(parentSpanCtx).start();
+        span = tracer.buildSpan(spanName).asChildOf(parentSpanCtx).start();
       }
     } catch (IllegalArgumentException iae) {
-      span = tracer.buildSpan(methodName)
+      span = tracer.buildSpan(spanName)
           .withTag("Error", "Extract failed and an IllegalArgumentException was thrown")
           .start();
     }

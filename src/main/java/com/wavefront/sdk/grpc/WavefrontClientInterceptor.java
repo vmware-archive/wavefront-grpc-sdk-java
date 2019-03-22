@@ -2,9 +2,21 @@ package com.wavefront.sdk.grpc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
+
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
 import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.grpc.reporter.WavefrontGrpcReporter;
+
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+
+import javax.annotation.Nullable;
+
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.ClientCall;
@@ -20,14 +32,6 @@ import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
 import io.opentracing.propagation.TextMap;
 import io.opentracing.tag.Tags;
-
-import javax.annotation.Nullable;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.NULL_TAG_VAL;
@@ -66,6 +70,8 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   private final WavefrontGrpcReporter wfGrpcReporter;
   @Nullable
   private final Tracer tracer;
+  @Nullable
+  private final Function<String, String> spanNameOverride;
   private final ApplicationTags applicationTags;
   private final boolean recordStreamingStats;
 
@@ -73,6 +79,8 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     private WavefrontGrpcReporter wfGrpcReporter;
     @Nullable
     private Tracer tracer;
+    @Nullable
+    private Function<String, String> spanNameOverride;
     private ApplicationTags applicationTags;
     boolean recordStreamingStats = false;
 
@@ -91,19 +99,26 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
       return this;
     }
 
+    public Builder spanNameOverride(Function<String, String> fullMethodNameTransform) {
+      this.spanNameOverride = fullMethodNameTransform;
+      return this;
+    }
+
     public WavefrontClientInterceptor build() {
       return new WavefrontClientInterceptor(wfGrpcReporter, tracer, applicationTags,
-          recordStreamingStats);
+          recordStreamingStats, spanNameOverride);
     }
   }
 
   private WavefrontClientInterceptor(WavefrontGrpcReporter wfGrpcReporter, Tracer tracer,
                                      ApplicationTags applicationTags,
-                                     boolean recordStreamingStats) {
+                                     boolean recordStreamingStats,
+                                     Function<String, String> spanNameOverride) {
     this.wfGrpcReporter = wfGrpcReporter;
     this.tracer = tracer;
     this.applicationTags = applicationTags;
     this.recordStreamingStats = recordStreamingStats;
+    this.spanNameOverride = spanNameOverride;
     wfGrpcReporter.registerClientHeartbeat();
   }
 
@@ -134,13 +149,14 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   }
 
   @Nullable
-  private Span createClientSpan(String spanName, String methodType) {
+  private Span createClientSpan(String methodName, String methodType) {
     if (tracer == null) {
       return null;
     }
     // attempt to get active spanContext, stored in grpc context
     Span toReturn;
     Span activeSpan = GRPC_CONTEXT_SPAN_KEY.get();
+    String spanName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
     if (activeSpan != null) {
       toReturn = tracer.buildSpan(spanName).asChildOf(activeSpan.context()).start();
     } else {

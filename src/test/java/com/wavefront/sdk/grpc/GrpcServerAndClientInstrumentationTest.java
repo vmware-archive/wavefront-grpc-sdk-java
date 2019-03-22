@@ -6,13 +6,7 @@ import com.wavefront.opentracing.WavefrontTracer;
 import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.grpc.reporter.GrpcTestReporter;
 import com.wavefront.sdk.grpc.reporter.TestSpanReporter;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
-import io.grpc.Server;
-import io.grpc.ServerBuilder;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,6 +19,15 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
+import io.grpc.Server;
+import io.grpc.ServerBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
+import io.grpc.stub.StreamObserver;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
 import static com.wavefront.sdk.common.Constants.SERVICE_TAG_KEY;
@@ -50,6 +53,11 @@ public class GrpcServerAndClientInstrumentationTest {
   private final String shard = "testShard";
   private final String clientService = "testClientService";
   private final String grpcService = "wf.test.Sample";
+  // set up tags
+  private final ApplicationTags serverApplicationTags =
+      new ApplicationTags.Builder(application, service).cluster(cluster).shard(shard).build();
+  private final ApplicationTags clientApplicationTags =
+      new ApplicationTags.Builder(application, clientService).cluster(cluster).shard(shard).build();
   private WavefrontServerTracerFactory serverTracerFactory;
   private WavefrontClientInterceptor clientInterceptor;
   private GrpcTestReporter grpcTestReporter;
@@ -62,11 +70,11 @@ public class GrpcServerAndClientInstrumentationTest {
 
   @Before
   public void setUp() throws Exception {
-    // set up tags
-    ApplicationTags serverApplicationTags = new ApplicationTags.Builder(application, service).
-        cluster(cluster).shard(shard).build();
-    ApplicationTags clientApplicationTags = new ApplicationTags.Builder(application, clientService).
-        cluster(cluster).shard(shard).build();
+    setUpClientAndServerInterceptors(null);
+    setUpChannelAndServer(new SampleService());
+  }
+
+  private void setUpClientAndServerInterceptors(Function<String, String> spanNameOverride) {
     // set up fake test reporter
     grpcTestReporter = new GrpcTestReporter();
     serverSpanReporter = new TestSpanReporter();
@@ -76,13 +84,16 @@ public class GrpcServerAndClientInstrumentationTest {
         grpcTestReporter, serverApplicationTags).
         withTracer(new WavefrontTracer.
             Builder(serverSpanReporter, serverApplicationTags).build()).
-        recordStreamingStats().build();
+        recordStreamingStats().
+        spanNameOverride(spanNameOverride).
+        build();
     clientInterceptor = new WavefrontClientInterceptor.Builder(
         grpcTestReporter, clientApplicationTags).
         withTracer(new WavefrontTracer.
             Builder(clientSpanReporter, serverApplicationTags).build()).
-        recordStreamingStats().build();
-    setUpChannelAndServer(new SampleService());
+        recordStreamingStats().
+        spanNameOverride(spanNameOverride).
+        build();
   }
 
   private void setUpChannelAndServer(SampleGrpc.SampleImplBase service) throws Exception {
@@ -114,7 +125,7 @@ public class GrpcServerAndClientInstrumentationTest {
   }
 
   @Test
-  public void testSuccessResponseStatsAndSpans() throws Exception {
+  public void testSuccessResponseStatsAndSpans() {
     // send message 1 message
     blockingStub.echo(Request.newBuilder().setMessage("message").build());
     // server and client heartbeats are registered
@@ -680,6 +691,18 @@ public class GrpcServerAndClientInstrumentationTest {
     assertEquals(0.0, grpcTestReporter.getGauge(serverTotalInflight).getValue(), 0.01);
     assertEquals(0.0, grpcTestReporter.getGauge(clientInflight).getValue(), 0.01);
     assertEquals(0.0, grpcTestReporter.getGauge(clientTotalInflight).getValue(), 0.01);
+  }
+
+  @Test
+  public void testClientAndServerSpanNameOverride() throws Exception {
+    setUpClientAndServerInterceptors(s -> s.substring(s.lastIndexOf(".") + 1));
+    setUpChannelAndServer(new SampleService());
+    blockingStub.echo(Request.newBuilder().setMessage("message").build());
+    WavefrontSpan serverSpan = serverSpanReporter.getReportedSpan("echo");
+    assertNotNull(serverSpan);
+    // check client span
+    WavefrontSpan clientSpan = clientSpanReporter.getReportedSpan("echo");
+    assertNotNull(clientSpan);
   }
 
   private class SampleService extends SampleGrpc.SampleImplBase {
