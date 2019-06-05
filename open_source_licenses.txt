@@ -1,6 +1,6 @@
 ﻿open_source_license.txt
 
-Wavefront by VMware gRPC SDK for Java 0.9.4 GA
+Wavefront by VMware gRPC SDK for Java 0.9.5 GA
 
 ======================================================================
 
@@ -732,4 +732,4 @@ Source Files is valid for three years from the date you acquired or last used th
 Software product. Alternatively, the Source Files may accompany the
 VMware service.
 
-[WAVEFRONTGRPCSDKJAVA094GAAB043019]
+[WAVEFRONTGRPCSDKJAVA095GAAB043019]
