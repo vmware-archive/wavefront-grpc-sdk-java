@@ -70,7 +70,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
   }
 
   public void registerGauge(MetricName metricName, Supplier<Double> value) {
-    wfReporter.newGauge(metricName, value);
+    wfReporter.newGauge(metricName, () -> value::get);
   }
 
   @Override
@@ -80,7 +80,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
 
   @Override
   public void registerGauge(MetricName metricName, AtomicInteger atomicInteger) {
-    wfReporter.newGauge(metricName, () -> (double) atomicInteger.get());
+    wfReporter.newGauge(metricName, () -> (() -> (double) atomicInteger.get()));
   }
 
   @Override
