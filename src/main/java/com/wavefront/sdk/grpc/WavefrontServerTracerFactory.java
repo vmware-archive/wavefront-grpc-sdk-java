@@ -24,7 +24,7 @@ import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
-import io.opentracing.propagation.TextMapExtractAdapter;
+import io.opentracing.propagation.TextMapAdapter;
 import io.opentracing.tag.Tags;
 
 import static com.wavefront.sdk.common.Constants.CLUSTER_TAG_KEY;
@@ -137,7 +137,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
     String spanName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
     try {
       SpanContext parentSpanCtx = tracer.extract(Format.Builtin.HTTP_HEADERS,
-          new TextMapExtractAdapter(headerMap));
+          new TextMapAdapter(headerMap));
       if (parentSpanCtx == null) {
         span = tracer.buildSpan(spanName).start();
       } else {
