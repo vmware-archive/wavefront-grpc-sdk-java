@@ -126,6 +126,8 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
   public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
       MethodDescriptor<ReqT, RespT> method, CallOptions callOptions, Channel next) {
     String methodName = Utils.getFriendlyMethodName(method.getFullMethodName());
+    methodName = spanNameOverride != null ? spanNameOverride.apply(methodName) :
+        methodName;
     Span span = createClientSpan(methodName, method.getType().toString());
     final ClientCallTracer tracerFactory = new ClientCallTracer(
         Utils.getServiceName(method.getFullMethodName()), methodName,
@@ -156,7 +158,7 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     // attempt to get active spanContext, stored in grpc context
     Span toReturn;
     Span activeSpan = GRPC_CONTEXT_SPAN_KEY.get();
-    String spanName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
+    String spanName = methodName;
     if (activeSpan != null) {
       toReturn = tracer.buildSpan(spanName).asChildOf(activeSpan.context()).start();
     } else {
