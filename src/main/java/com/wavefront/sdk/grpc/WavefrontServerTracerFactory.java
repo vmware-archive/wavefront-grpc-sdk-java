@@ -118,6 +118,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
   @Override
   public ServerStreamTracer newServerStreamTracer(String fullMethodName, Metadata headers) {
     String methodName = Utils.getFriendlyMethodName(fullMethodName);
+    methodName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
     return new ServerTracer(Utils.getServiceName(fullMethodName), methodName,
         createServerSpan(headers, methodName));
   }
@@ -134,7 +135,7 @@ public class WavefrontServerTracerFactory extends ServerStreamTracer.Factory {
       }
     }
     Span span;
-    String spanName = spanNameOverride != null ? spanNameOverride.apply(methodName) : methodName;
+    String spanName = methodName;
     try {
       SpanContext parentSpanCtx = tracer.extract(Format.Builtin.HTTP_HEADERS,
           new TextMapAdapter(headerMap));
