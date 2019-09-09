@@ -57,7 +57,7 @@
         <dependency>
             <groupId>com.wavefront</groupId>
             <artifactId>wavefront-opentracing-sdk-java</artifactId>
-            <version>1.6</version>
+            <version>1.11</version>
         </dependency>
         <!-- Test Dependencies -->
         <dependency>
