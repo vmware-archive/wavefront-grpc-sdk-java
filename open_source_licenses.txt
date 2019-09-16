@@ -1,6 +1,6 @@
 open_source_licenses.txt
 
-Wavefront by VMware gRPC SDK for Java 0.9.7 GA
+Wavefront by VMware gRPC SDK for Java 0.9.8 GA
 
 ======================================================================
 
@@ -30,13 +30,14 @@ SECTION 1: Apache License, V2.0
    >>> com.fasterxml.jackson.core:jackson-annotations-2.9.0
    >>> com.fasterxml.jackson.core:jackson-annotations-2.9.9
    >>> com.fasterxml.jackson.core:jackson-core-2.9.9
-   >>> com.fasterxml.jackson.core:jackson-databind-2.9.9
+   >>> com.fasterxml.jackson.core:jackson-databind-2.9.9.3
    >>> com.fasterxml.jackson.dataformat:jackson-dataformat-yaml-2.9.9
    >>> com.google.code.findbugs:jsr305-3.0.0
    >>> com.google.code.gson:gson-2.7
    >>> com.google.errorprone:error_prone_annotations-2.1.2
    >>> com.google.guava:guava-20.0
    >>> com.tdunning:t-digest-3.2
+   >>> com.vladmihalcea:hibernate-types-52-2.6.1
    >>> io.dropwizard.metrics5:metrics-core-5.0.0-rc2
    >>> io.dropwizard.metrics5:metrics-jvm-5.0.0-rc2
    >>> io.grpc:grpc-context-1.12.0
@@ -94,8 +95,6 @@ You may obtain a copy of the License at:
 
 http://www.apache.org/licenses/LICENSE-2.0
 
-
-
 >>> com.fasterxml.jackson.core:jackson-core-2.9.9
 
 # Jackson JSON processor
@@ -128,9 +127,7 @@ You may obtain a copy of the License at:
 
 http://www.apache.org/licenses/LICENSE-2.0
 
-
-
->>> com.fasterxml.jackson.core:jackson-databind-2.9.9
+>>> com.fasterxml.jackson.core:jackson-databind-2.9.9.3
 
 # Jackson JSON processor
 
@@ -161,8 +158,6 @@ specific rights regarding derivate works.
 You may obtain a copy of the License at:
 
 http://www.apache.org/licenses/LICENSE-2.0
-
-
 
 >>> com.fasterxml.jackson.dataformat:jackson-dataformat-yaml-2.9.9
 
@@ -196,13 +191,9 @@ You may obtain a copy of the License at:
 
 http://www.apache.org/licenses/LICENSE-2.0
 
-
-
 >>> com.google.code.findbugs:jsr305-3.0.0
 
 License : Apache 2.0
-
-
 
 >>> com.google.code.gson:gson-2.7
 
@@ -274,6 +265,10 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+>>> com.vladmihalcea:hibernate-types-52-2.6.1
+
+License: Apache 2.0
 
 >>> io.dropwizard.metrics5:metrics-core-5.0.0-rc2
 
@@ -361,8 +356,6 @@ is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND
 or implied. See the License for the specific language governing permissions and limitations under
 the License.
 
-
-
 >>> io.opentracing:opentracing-noop-0.32.0
 
 Copyright 2016-2019 The OpenTracing Authors
@@ -377,8 +370,6 @@ is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND
 or implied. See the License for the specific language governing permissions and limitations under
 the License.
 
-
-
 >>> io.opentracing:opentracing-util-0.32.0
 
 Copyright 2016-2019 The OpenTracing Authors
@@ -392,8 +383,6 @@ Unless required by applicable law or agreed to in writing, software distributed 
 is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
 or implied. See the License for the specific language governing permissions and limitations under
 the License.
-
-
 
 >>> org.yaml:snakeyaml-1.23
 
@@ -410,8 +399,6 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-
 
 --------------- SECTION 2: BSD-STYLE, MIT-STYLE, OR SIMILAR STYLE LICENSES ----------
 
@@ -721,4 +708,4 @@ Source Files is valid for three years from the date you acquired or last used th
 Software product. Alternatively, the Source Files may accompany the
 VMware service.
 
-[WAVEFRONTGRPCSDKJAVA097GAAB062719]
+[WAVEFRONTGRPCSDKJAVA098GAAB091219]
