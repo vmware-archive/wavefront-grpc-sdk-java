@@ -28,4 +28,9 @@ public class TestSpanReporter implements Reporter {
   @Override
   public void close() throws IOException {
   }
+
+  @Override
+  public void flush() {
+    spanCache.clear();
+  }
 }
