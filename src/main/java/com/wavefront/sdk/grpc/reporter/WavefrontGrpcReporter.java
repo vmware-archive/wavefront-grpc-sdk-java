@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.wavefront.internal.reporter.SdkReporter;
 import com.wavefront.internal.reporter.WavefrontInternalReporter;
 import com.wavefront.internal_reporter_java.io.dropwizard.metrics5.MetricName;
+import com.wavefront.sdk.common.Utils;
 import com.wavefront.sdk.common.WavefrontSender;
 import com.wavefront.sdk.common.application.ApplicationTags;
 import com.wavefront.sdk.common.application.HeartbeaterService;
@@ -22,6 +23,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import static com.wavefront.sdk.common.Constants.APPLICATION_TAG_KEY;
+import static com.wavefront.sdk.common.Constants.SDK_METRIC_PREFIX;
 import static com.wavefront.sdk.grpc.Constants.GRPC_CLIENT_COMPONENT;
 import static com.wavefront.sdk.grpc.Constants.GRPC_SERVER_COMPONENT;
 
@@ -37,6 +39,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
       Logger.getLogger(WavefrontGrpcReporter.class.getCanonicalName());
   private final int reportingIntervalSeconds;
   private final WavefrontInternalReporter wfReporter;
+  private final WavefrontInternalReporter sdkMetricsReporter;
   private final WavefrontMetricSender wfMetricSender;
   private final ApplicationTags applicationTags;
   private final String source;
@@ -44,14 +47,24 @@ public class WavefrontGrpcReporter implements SdkReporter {
   private HeartbeaterService serverHeartbeat;
 
   @VisibleForTesting
+  @Deprecated
   WavefrontGrpcReporter(WavefrontInternalReporter wfReporter, int reportingIntervalSeconds,
                         WavefrontMetricSender wfMetricSender,
                         ApplicationTags applicationTags, String source) {
+    this(wfReporter, reportingIntervalSeconds, wfMetricSender, applicationTags, source, null);
+  }
+
+  @VisibleForTesting
+  WavefrontGrpcReporter(WavefrontInternalReporter wfReporter, int reportingIntervalSeconds,
+                        WavefrontMetricSender wfMetricSender,
+                        ApplicationTags applicationTags, String source,
+                        WavefrontInternalReporter sdkMetricsReporter) {
     this.wfReporter = wfReporter;
     this.reportingIntervalSeconds = reportingIntervalSeconds;
     this.wfMetricSender = wfMetricSender;
     this.applicationTags = applicationTags;
     this.source = source;
+    this.sdkMetricsReporter = sdkMetricsReporter;
   }
 
   @Override
@@ -86,6 +99,9 @@ public class WavefrontGrpcReporter implements SdkReporter {
   @Override
   public void start() {
     wfReporter.start(reportingIntervalSeconds, TimeUnit.SECONDS);
+    if (sdkMetricsReporter != null) {
+      sdkMetricsReporter.start(1, TimeUnit.MINUTES);
+    }
   }
 
   @Override
@@ -95,6 +111,12 @@ public class WavefrontGrpcReporter implements SdkReporter {
     }
     if (clientHeartbeat != null) {
       clientHeartbeat.close();
+    }
+    if (wfReporter != null) {
+      wfReporter.stop();
+    }
+    if (sdkMetricsReporter != null) {
+      sdkMetricsReporter.stop();
     }
   }
 
@@ -181,8 +203,17 @@ public class WavefrontGrpcReporter implements SdkReporter {
       WavefrontInternalReporter wfReporter = new WavefrontInternalReporter.Builder().
           prefixedWith(prefix).withSource(source).withReporterPointTags(pointTags).
           reportMinuteDistribution().build(wavefrontSender);
+
+      WavefrontInternalReporter sdkMetricsReporter = new WavefrontInternalReporter.Builder().
+          prefixedWith(SDK_METRIC_PREFIX + ".grpc").withSource(source).
+          withReporterPointTags(pointTags).build(wavefrontSender);
+
+      double sdkVersion = Utils.getSemVer();
+      sdkMetricsReporter.newGauge(new MetricName("version", Collections.emptyMap()),
+          () -> (() -> sdkVersion));
+
       return new WavefrontGrpcReporter(wfReporter, reportingIntervalSeconds, wavefrontSender,
-          applicationTags, source);
+          applicationTags, source, sdkMetricsReporter);
     }
   }
 }
