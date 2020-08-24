@@ -208,7 +208,7 @@ public class WavefrontGrpcReporter implements SdkReporter {
           prefixedWith(SDK_METRIC_PREFIX + ".grpc").withSource(source).
           withReporterPointTags(pointTags).build(wavefrontSender);
 
-      double sdkVersion = Utils.getSemVer();
+      double sdkVersion = Utils.getSemVerGauge("wavefront-grpc-sdk-java");
       sdkMetricsReporter.newGauge(new MetricName("version", Collections.emptyMap()),
           () -> (() -> sdkVersion));
 
