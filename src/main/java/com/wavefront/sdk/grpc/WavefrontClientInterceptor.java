@@ -22,6 +22,7 @@ import io.grpc.Channel;
 import io.grpc.ClientCall;
 import io.grpc.ClientInterceptor;
 import io.grpc.ClientStreamTracer;
+import io.grpc.ClientStreamTracer.StreamInfo;
 import io.grpc.ForwardingClientCall;
 import io.grpc.ForwardingClientCallListener;
 import io.grpc.Metadata;
@@ -215,7 +216,8 @@ public class WavefrontClientInterceptor implements ClientInterceptor {
     }
 
     @Override
-    public ClientStreamTracer newClientStreamTracer(CallOptions callOptions, Metadata headers) {
+    public ClientStreamTracer newClientStreamTracer(StreamInfo unused,
+                                                    Metadata headers) {
       if (span != null) {
         tracer.inject(span.context(), Format.Builtin.HTTP_HEADERS, new TextMap() {
           @Override
