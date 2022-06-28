@@ -19,7 +19,9 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
+import java.util.logging.Logger;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -127,18 +129,32 @@ public class GrpcServerAndClientInstrumentationTest {
   @Test
   public void testSuccessResponseStatsAndSpans() {
     // send message 1 message
-    blockingStub.echo(Request.newBuilder().setMessage("message").build());
+    Response message = blockingStub.echo(Request.newBuilder().setMessage("message").build());
+    assertTrue(message.isInitialized());
+
     // server and client heartbeats are registered
     assertTrue(grpcTestReporter.isClientHeartbeatRegistered());
     assertTrue(grpcTestReporter.isServerHeartbeatRegistered());
     // server granular metrics
-    assertEquals(1, grpcTestReporter.getCounter(new MetricName(
+
+    AtomicInteger possibleFlake = grpcTestReporter.getCounter(new MetricName(
         "server.response.wf.test.Sample.echo.OK.cumulative", new HashMap<String, String>() {{
       put(CLUSTER_TAG_KEY, cluster);
       put(SERVICE_TAG_KEY, service);
       put(SHARD_TAG_KEY, shard);
       put(GRPC_SERVICE_TAG_KEY, grpcService);
-    }})).get());
+    }}));
+    if (1 != possibleFlake.get()) {
+      try {
+        // This test flakes a lot on CI, but reliably passes locally
+        // ¯\_(ツ)_/¯ maybe it just needs more time?
+        Logger.getAnonymousLogger().info("possible flake - sleeping for 1 second, trying again");
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        // ignored
+      }
+    }
+    assertEquals(1, possibleFlake.get());
     assertEquals(1, grpcTestReporter.getCounter(new MetricName(
         "server.response.wf.test.Sample.echo.OK.aggregated_per_shard",
         new HashMap<String, String>() {{
