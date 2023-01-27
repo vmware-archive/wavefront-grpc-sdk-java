@@ -1,3 +1,6 @@
+```
+VMware has ended active development of this project, this repository will no longer be updated.
+```
 # wavefront-grpc-sdk-java [![build status][ci-img]][ci] [![Released Version][maven-img]][maven]
 
 The Wavefront gRPC SDK for Java is a library that collects out-of-the-box metrics, histograms, and trace data from gRPC operations in your Java application, and reports that data to Wavefront. You can analyze the telemetry data in [Wavefront](https://www.wavefront.com) to better understand how your application is performing in production. 
